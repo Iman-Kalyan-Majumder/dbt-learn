@@ -1,7 +1,58 @@
 with customers as (
-    select * from {{ref("stg_jaffle_shop__customers")}}
+
+     select * from {{ ref('stg_jaffle_shop__customers') }}
+
 ),
-orders as (
-    select * from {{ref("stg_jaffle_shop__orders")}}
+
+orders as ( 
+
+    select * from {{ ref('stg_jaffle_shop__orders') }}
+
+),
+
+customer_orders as (
+
+    select
+        customer_id,
+
+        min(order_date) as first_order_date,
+        max(order_date) as most_recent_order_date,
+        count(order_id) as number_of_orders
+
+    from orders
+
+    group by 1
+
+),
+
+final as (
+
+    select
+        customers.customer_id,
+        customers.first_name,
+        customers.last_name,
+        customer_orders.first_order_date,
+        customer_orders.most_recent_order_date,
+        coalesce (customer_orders.number_of_orders, 0) 
+        as number_of_orders
+
+    from customers
+
+    left join customer_orders using (customer_id)
+),
+
+customer_expenditure as (
+    select 
+        customer_id, 
+        sum(amount) as lifetime_value 
+    from 
+        {{ref('stg_jaffle_shop__orders')}} 
+    join
+        {{ref('stg_stripe__payments')}} P
+    using(order_id)
+    where P.status='success'
+    group by 
+        customer_id
 )
-select orders.*, first_name, last_name from orders left join customers on orders.customer_id=customers.customer_id
+
+select * from final join customer_expenditure using(customer_id)
